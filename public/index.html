@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SkyRoute - Airline Reservation System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --accent: #38bdf8;
+      --accent-hover: #0284c7;
+      --text: #f8fafc;
+      --text-dim: #94a3b8;
+      --border: #334155;
+      --booked: #ef4444;
+      --selected: #22c55e;
+      --available: #334155;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--text); padding: 2rem 1rem; display: flex; justify-content: center; }
+    .container { max-width: 1000px; width: 100%; display: grid; gap: 2rem; }
+    header { text-align: center; }
+    header h1 { font-size: 2.2rem; color: var(--accent); }
+    header p { color: var(--text-dim); margin-top: 0.25rem; }
+    
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    @media (max-width: 850px) { .grid { grid-template-columns: 1fr; } }
+    
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }
+    h2 { font-size: 1.25rem; margin-bottom: 1rem; color: #e2e8f0; }
+    
+    .form-group { margin-bottom: 1rem; }
+    label { display: block; font-size: 0.85rem; color: var(--text-dim); margin-bottom: 0.25rem; }
+    input, select { width: 100%; background: #0f172a; border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem 0.8rem; color: var(--text); font-size: 0.95rem; }
+    input:focus, select:focus { outline: none; border-color: var(--accent); }
+    
+    button { width: 100%; background: var(--accent); color: #0f172a; border: none; padding: 0.75rem; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; margin-top: 0.5rem; }
+    button:hover { background: var(--accent-hover); }
+    
+    .result-box { margin-top: 1rem; padding: 1rem; background: #0f172a; border-radius: 8px; border: 1px dashed var(--border); }
+    .badge { display: inline-block; padding: 0.2rem 0.5rem; background: #0369a1; border-radius: 4px; font-size: 0.8rem; margin: 0.2rem; }
+    .price-tag { font-size: 1.4rem; font-weight: bold; color: #4ade80; margin-top: 0.5rem; }
+
+    /* Interactive Seat Map Styles */
+    .cabin-container { background: #0f172a; border-radius: 8px; padding: 1.25rem; margin-top: 1rem; border: 1px solid var(--border); }
+    .seat-legend { display: flex; justify-content: space-around; margin-bottom: 1rem; font-size: 0.8rem; color: var(--text-dim); }
+    .legend-item { display: flex; align-items: center; gap: 0.4rem; }
+    .legend-box { width: 14px; height: 14px; border-radius: 3px; }
+
+    .seat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem 1rem; max-width: 260px; margin: 0 auto; }
+    .seat-btn {
+      background: var(--available);
+      color: var(--text);
+      border: 1px solid #475569;
+      border-radius: 6px;
+      padding: 0.6rem 0;
+      font-size: 0.85rem;
+      font-weight: bold;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s ease;
+    }
+    .seat-btn:hover:not(.booked) { background: #475569; border-color: var(--accent); }
+    .seat-btn.selected { background: var(--selected) !important; color: #0f172a; font-weight: 800; border-color: var(--selected); }
+    .seat-btn.booked { background: var(--booked) !important; color: #fee2e2; border-color: #b91c1c; cursor: not-allowed; opacity: 0.6; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>SkyRoute Engine</h1>
+    <p>C++ CrowCpp & Dijkstra Shortest Path Flight Optimizer</p>
+  </header>
+
+  <div class="grid">
+    <!-- Panel 1: Route Optimizer -->
+    <div class="card">
+      <h2>✈️ Find Optimal Route</h2>
+      <div class="form-group">
+        <label>Origin Airport</label>
+        <select id="origin">
+          <option value="DEL">DEL (New Delhi)</option>
+          <option value="BOM">BOM (Mumbai)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Destination Airport</label>
+        <select id="destination">
+          <option value="BLR" selected>BLR (Bengaluru)</option>
+          <option value="BOM">BOM (Mumbai)</option>
+        </select>
+      </div>
+      <button onclick="findRoute()">Compute Dijkstra Path</button>
+
+      <div id="routeResult" class="result-box" style="display: none;">
+        <div style="font-size: 0.9rem; color: var(--text-dim);">Optimal Flight Sequence:</div>
+        <div id="pathWaypoints" style="margin: 0.5rem 0;"></div>
+        <div style="font-size: 0.9rem; color: var(--text-dim);">Operated Flights:</div>
+        <div id="flightsList" style="margin: 0.5rem 0;"></div>
+        <div class="price-tag" id="totalCost"></div>
+      </div>
+    </div>
+
+    <!-- Panel 2: Interactive Seat Map & Booking -->
+    <div class="card">
+      <h2>🎟️ Seat Selection & Booking</h2>
+      <div class="form-group">
+        <label>Select Flight</label>
+        <select id="flightId" onchange="loadSeats()">
+          <option value="AI101">AI101 (DEL ➔ BOM)</option>
+          <option value="6E202">6E202 (BOM ➔ BLR)</option>
+          <option value="UK808">UK808 (DEL ➔ BLR)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Passenger Name</label>
+        <input type="text" id="passengerName" placeholder="e.g. Jitesh M" required>
+      </div>
+
+      <!-- Interactive Cabin -->
+      <label>Select Your Seat</label>
+      <div class="cabin-container">
+        <div class="seat-legend">
+          <div class="legend-item"><div class="legend-box" style="background: var(--available);"></div> Available</div>
+          <div class="legend-item"><div class="legend-box" style="background: var(--selected);"></div> Selected</div>
+          <div class="legend-item"><div class="legend-box" style="background: var(--booked);"></div> Booked</div>
+        </div>
+        <div id="seatGrid" class="seat-grid"></div>
+      </div>
+
+      <div style="margin-top: 1rem;">
+        <span style="font-size: 0.85rem; color: var(--text-dim);">Chosen Seat: </span>
+        <strong id="chosenSeatLabel" style="color: var(--accent);">None</strong>
+      </div>
+
+      <button onclick="bookTicket()">Confirm Booking</button>
+
+      <div id="bookingResult" class="result-box" style="display: none;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let selectedSeat = null;
+
+  async function findRoute() {
+    const from = document.getElementById('origin').value;
+    const to = document.getElementById('destination').value;
+    const resBox = document.getElementById('routeResult');
+
+    try {
+      const res = await fetch(`/api/flights/optimize?from=${from}&to=${to}`);
+      const data = await res.json();
+
+      if (data.error) {
+        resBox.style.display = 'block';
+        resBox.innerHTML = `<span style="color: #f87171;">${data.error}</span>`;
+        return;
+      }
+
+      resBox.style.display = 'block';
+      document.getElementById('pathWaypoints').innerHTML = data.path.map(p => `<span class="badge">${p}</span>`).join(' ➔ ');
+      document.getElementById('flightsList').innerHTML = data.flights.map(f => `<span class="badge" style="background:#475569;">${f}</span>`).join(' ');
+      document.getElementById('totalCost').innerText = `₹ ${data.total_cost.toLocaleString()}`;
+    } catch (err) {
+      alert("Failed to query routing API");
+    }
+  }
+
+  // Generate 6 rows (1..6) and 4 columns (A, B, C, D)
+  async function loadSeats() {
+    const flightId = document.getElementById('flightId').value;
+    const grid = document.getElementById('seatGrid');
+    selectedSeat = null;
+    document.getElementById('chosenSeatLabel').innerText = "None";
+
+    try {
+      const res = await fetch(`/api/flights/${flightId}/seats`);
+      const data = await res.json();
+      const occupied = new Set(data.occupied_seats || []);
+
+      grid.innerHTML = '';
+      const cols = ['A', 'B', 'C', 'D'];
+
+      for (let r = 1; r <= 6; r++) {
+        for (let c of cols) {
+          const seatId = `${r}${c}`;
+          const isBooked = occupied.has(seatId);
+
+          const btn = document.createElement('div');
+          btn.className = `seat-btn ${isBooked ? 'booked' : ''}`;
+          btn.innerText = seatId;
+
+          if (!isBooked) {
+            btn.onclick = () => selectSeat(seatId, btn);
+          }
+          grid.appendChild(btn);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load seats", err);
+    }
+  }
+
+  function selectSeat(seatId, btnElement) {
+    document.querySelectorAll('.seat-btn').forEach(b => b.classList.remove('selected'));
+    btnElement.classList.add('selected');
+    selectedSeat = seatId;
+    document.getElementById('chosenSeatLabel').innerText = seatId;
+  }
+
+  async function bookTicket() {
+    const passenger_name = document.getElementById('passengerName').value.trim();
+    const flight_id = document.getElementById('flightId').value;
+    const resBox = document.getElementById('bookingResult');
+
+    if (!passenger_name) {
+      alert("Please enter the passenger name");
+      return;
+    }
+    if (!selectedSeat) {
+      alert("Please select an available seat from the cabin layout");
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/book', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passenger_name, flight_id, seat_number: selectedSeat })
+      });
+      const data = await res.json();
+
+      resBox.style.display = 'block';
+      if (res.ok) {
+        resBox.innerHTML = `
+          <div style="color: #4ade80; font-weight: bold;">✔ Reservation Confirmed!</div>
+          <div style="font-size: 0.9rem; margin-top: 0.5rem;">
+            Passenger: <strong>${data.passenger}</strong><br>
+            Flight: <strong>${data.flight_id}</strong> | Seat: <strong>${data.seat}</strong>
+          </div>
+        `;
+        // Refresh the seat map immediately
+        await loadSeats();
+      } else {
+        // Displays 409 Conflict error directly
+        resBox.innerHTML = `<span style="color: #f87171; font-weight: bold;">❌ ${data.error}</span>`;
+        await loadSeats();
+      }
+    } catch (err) {
+      alert("Network or server failure");
+    }
+  }
+
+  // Initialize seats on page load
+  window.onload = loadSeats;
+</script>
+</body>
+</html>
