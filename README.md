@@ -207,8 +207,8 @@ This project is open-source and available under the [MIT License](LICENSE).
 
 ## 👤 Author
 
-** ** and
-** **
+Jitesh.M
+Shashanka.B
 
 ---
 
