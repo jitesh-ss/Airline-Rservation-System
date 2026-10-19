@@ -1,215 +1,124 @@
-# ✈️ SkyRoute — Airline Reservation System
+# SkyRoute Neo — Airline Reservation System & Dijkstra Flight Optimizer
 
-A **full-stack Airline Reservation System** built entirely in **C++** using the [Crow](https://crowcpp.org/) micro web-framework, **SQLite** for persistent storage, and **Dijkstra's shortest-path algorithm** for optimal route computation. The project demonstrates systems-level programming concepts (graph algorithms, embedded databases, RESTful APIs) with a modern, responsive web frontend.
-
----
-
-## 🚀 Features
-
-- **Cheapest Route Finder** — Uses **Dijkstra's Algorithm** on a weighted flight graph to compute the lowest-cost path between any two airports (with multi-hop support).
-- **Interactive Seat Map** — Visual cabin layout (6 rows × 4 columns) with real-time seat availability. Click to select; booked seats are locked.
-- **Seat Booking with Collision Handling** — Concurrent booking attempts on the same seat are safely handled via SQLite's `UNIQUE` constraint, returning a `409 Conflict` response.
-- **Persistent Storage** — All bookings are stored in a local SQLite database (`airline.db`), surviving server restarts.
-- **RESTful API** — Clean JSON API for route optimization, seat queries, and ticket booking.
-- **Single-Page Frontend** — A responsive, dark-themed UI served directly by the C++ backend.
+SkyRoute Neo is a high-performance airline reservation and routing optimization platform powered by **C++17**, **Crow Microframework**, **SQLite3**, and a state-of-the-art interactive web frontend.
 
 ---
 
-## 🛠️ Tech Stack
+## Key Features
 
-| Layer        | Technology                                                                 |
-|--------------|----------------------------------------------------------------------------|
-| **Language** | C++17                                                                      |
-| **Web Framework** | [Crow](https://crowcpp.org/) (header-only, included in `include/`)   |
-| **Database** | [SQLite3](https://www.sqlite.org/) (embedded, zero-config)                 |
-| **Build**    | [CMake](https://cmake.org/) (≥ 3.15)                                      |
-| **Algorithm**| Dijkstra's Shortest Path (min-heap priority queue)                         |
-| **Frontend** | HTML5, CSS3 (custom properties), Vanilla JavaScript (Fetch API)            |
+### 1. Dijkstra Shortest Path Flight Optimizer
+- Uses graph theory and priority-queue Dijkstra's algorithm to compute the lowest-fare routing between airport hubs (Delhi `DEL`, Mumbai `BOM`, Bengaluru `BLR`).
+- Computes multi-hop cost optimizations (e.g., `DEL ➔ BOM ➔ BLR` at ₹7,700 vs direct ₹8,500).
+- Displays animated waypoints, flight identifiers, layover details, and carrier schedules.
+
+### 2. Interactive Aircraft Cabin & Seat Selector
+- High-fidelity fuselage graphics with cockpit windows, wings, emergency exit rows, and galley partitions.
+- Supports multiple aircraft types:
+  - **Airbus A320neo** (Air India `AI101` — DEL ➔ BOM)
+  - **Airbus A321neo** (IndiGo `6E202` — BOM ➔ BLR)
+  - **Boeing 787-9 Dreamliner** (Vistara `UK808` — DEL ➔ BLR)
+- Tiered cabin layout: First / Business Class (Rows 1–2) and Standard Economy (Rows 3+).
+- Real-time seat status synchronization with SQLite database (`airline.db`).
+- Atomic collision prevention: handles simultaneous seat reservation conflicts with HTTP 409 and user feedback.
+
+### 3. Digital Boarding Pass Generator
+- Generates realistic airline boarding passes with passenger name, PNR code, seat number, gate, terminal, and boarding times.
+- Dynamically rendered SVG barcodes and security QR codes.
+- Integrated Print / Save as PDF capability.
+
+### 4. Live Air Traffic Radar Simulator
+- HTML5 Canvas radar screen with range rings, rotating scanner beam, and airport hubs.
+- Animated aircraft navigating active routes in real-time.
+- Visual Dijkstra route highlighter displaying winning paths.
+
+### 5. Persistent Reservations Manager
+- SQLite-backed bookings ledger with instant ticket retrieval.
+- One-click booking cancellation that automatically frees up occupied seats in real time.
+
+### 6. Acoustic & Visual Polish
+- Native Web Audio API sound synthesizer (boarding chimes, seat clicks, conflict buzzes).
+- Dynamic canvas confetti bursts on confirmed reservations.
+- Real-time server telemetry heartbeat monitoring latency to the Crow C++ engine.
 
 ---
 
-## 📂 Project Structure
+## System Architecture
 
+```mermaid
+graph TD
+    Client["Browser Frontend (Vanilla JS / Canvas / CSS)"]
+    Server["C++17 Crow Server (Port 18080)"]
+    DB[(SQLite3: airline.db)]
+    Graph["FlightGraph Engine (Dijkstra)"]
+
+    Client -->|GET /| Server
+    Client -->|GET /api/flights/optimize| Server
+    Client -->|GET /api/flights/:id/seats| Server
+    Client -->|POST /api/book| Server
+    Client -->|GET /api/bookings| Server
+    Client -->|DELETE /api/bookings/:id| Server
+
+    Server --> Graph
+    Server --> DB
 ```
-Airline-Reservation-System/
-├── CMakeLists.txt          # Build configuration
-├── README.md               # Project documentation
-├── .gitignore              # Ignores build/ and *.db files
-├── include/
-│   └── crow_all.h          # Crow web-framework (single-header)
-├── public/
-│   └── index.html          # Frontend UI (served at "/")
-└── src/
-    └── main.cpp            # Application entry point (server + logic)
-```
 
 ---
 
-## ⚙️ Prerequisites
+## REST API Specification
 
-Make sure you have the following installed:
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/` | Serves the single-page frontend application (`public/index.html`) |
+| `GET` | `/api/health` | Health check endpoint returning `{ "status": "running" }` |
+| `GET` | `/api/flights` | Returns catalog of all scheduled flights and aircraft metadata |
+| `GET` | `/api/flights/optimize?from=DEL&to=BLR` | Computes Dijkstra shortest path and lowest total cost |
+| `GET` | `/api/flights/:flight_id/seats` | Returns list of currently occupied seats for a flight |
+| `POST` | `/api/book` | Books a seat for a passenger with SQLite collision handling |
+| `GET` | `/api/bookings` | Lists all confirmed reservations stored in `airline.db` |
+| `DELETE` | `/api/bookings/:id` | Cancels a booking and releases the seat |
 
-- **C++17 compatible compiler** (GCC ≥ 7, Clang ≥ 5, or MSVC ≥ 19.14)
-- **CMake** ≥ 3.15
-- **SQLite3 development libraries**
+---
 
-### Installing Dependencies
+## Build & Execution Instructions
 
-**Ubuntu / Debian:**
+### Prerequisites
+- C++17 compiler (GCC / MinGW / Clang)
+- CMake 3.15+
+- SQLite3 development libraries (`libsqlite3`)
+- Asio standalone headers
+
+### Build with CMake
 ```bash
-sudo apt update
-sudo apt install build-essential cmake libsqlite3-dev
+# 1. Configure build directory
+cmake -B build -G "MinGW Makefiles"
+
+# 2. Compile the executable
+cmake --build build
 ```
 
-**macOS (Homebrew):**
+### Run the Server
 ```bash
-brew install cmake sqlite3
-```
+# Windows
+build\airline_server.exe
 
-**Fedora / RHEL:**
-```bash
-sudo dnf install gcc-c++ cmake sqlite-devel
-```
-
----
-
-## 🔨 Build & Run
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/<your-username>/Airline-Reservation-System.git
-cd Airline-Reservation-System
-
-# 2. Create a build directory and compile
-mkdir build && cd build
-cmake ..
-make
-
-# 3. Run the server (from the project root, so it can find public/)
-cd ..
+# Linux / macOS
 ./build/airline_server
 ```
 
-The server starts on **http://localhost:18080**. Open it in your browser to use the application.
-
----
-
-## 📡 API Endpoints
-
-### 1. Health Check
+Open your browser at:
 ```
-GET /api/health
-```
-**Response:**
-```json
-{ "status": "running" }
-```
-
-### 2. Find Cheapest Route (Dijkstra)
-```
-GET /api/flights/optimize?from=DEL&to=BLR
-```
-**Response:**
-```json
-{
-  "total_cost": 7700.0,
-  "path": ["DEL", "BOM", "BLR"],
-  "flights": ["AI101", "6E202"]
-}
-```
-
-### 3. Get Occupied Seats for a Flight
-```
-GET /api/flights/{flight_id}/seats
-```
-**Example:** `GET /api/flights/AI101/seats`
-
-**Response:**
-```json
-{
-  "occupied_seats": ["1A", "3C"]
-}
-```
-
-### 4. Book a Seat
-```
-POST /api/book
-Content-Type: application/json
-```
-**Request Body:**
-```json
-{
-  "flight_id": "AI101",
-  "passenger_name": "Shashank",
-  "seat_number": "2B"
-}
-```
-**Success (201):**
-```json
-{
-  "status": "CONFIRMED",
-  "flight_id": "AI101",
-  "passenger": "Shashank",
-  "seat": "2B"
-}
-```
-**Conflict (409) — Seat Already Booked:**
-```json
-{
-  "error": "Seat 2B is already booked on flight AI101!"
-}
+http://localhost:18080/
 ```
 
 ---
 
-## 🗺️ Available Flight Routes
+## 👤 Authors
 
-The demo includes the following hardcoded routes:
-
-| Flight ID | Origin         | Destination     | Price (₹) |
-|-----------|----------------|-----------------|-----------|
-| AI101     | DEL (New Delhi)| BOM (Mumbai)    | 4,500     |
-| 6E202     | BOM (Mumbai)   | BLR (Bengaluru) | 3,200     |
-| UK808     | DEL (New Delhi)| BLR (Bengaluru) | 8,500     |
-
-> **Note:** Dijkstra's algorithm finds that `DEL → BOM → BLR` (₹7,700) is cheaper than the direct `DEL → BLR` (₹8,500).
-
----
-
-## 💡 Key Concepts Demonstrated
-
-- **Graph Algorithms** — Dijkstra's shortest path using `std::priority_queue` (min-heap).
-- **Embedded Database** — SQLite3 with prepared statements and parameterized queries (SQL injection safe).
-- **RESTful API Design** — Proper HTTP methods (`GET`, `POST`) and status codes (`200`, `201`, `400`, `404`, `409`, `500`).
-- **Concurrency Handling** — Seat booking collision detection via database constraints.
-- **Systems Programming** — Raw C++ with no heavy frameworks; manual memory management for SQLite.
-- **Full-Stack C++** — Both backend API and static file serving from a single C++ binary.
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Feel free to:
-
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/add-new-routes`)
-3. **Commit** your changes (`git commit -m "Add new flight routes"`)
-4. **Push** to the branch (`git push origin feature/add-new-routes`)
-5. **Open** a Pull Request
+- **Jitesh.M**
+- **Shashanka.B**
 
 ---
 
 ## 📄 License
 
 This project is open-source and available under the [MIT License](LICENSE).
-
----
-
-## 👤 Author
-
-Jitesh.M
-Shashanka.B
-
----
-
-> ⭐ If you found this project helpful, consider giving it a star!

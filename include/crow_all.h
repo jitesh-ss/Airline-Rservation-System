@@ -1063,6 +1063,11 @@ namespace sha1
 #endif
 #endif
 
+namespace asio {
+    using io_service = io_context;
+}
+
+
 #if (CROW_USE_BOOST && BOOST_VERSION >= 107000) || (ASIO_VERSION >= 101300)
 #define GET_IO_SERVICE(s) ((asio::io_context&)(s).get_executor().context())
 #else
@@ -10560,7 +10565,7 @@ namespace crow // NOTE: Already documented in "crow/app.h"
     {
     public:
         Server(Handler* handler, std::string bindaddr, uint16_t port, std::string server_name = std::string("Crow/") + VERSION, std::tuple<Middlewares...>* middlewares = nullptr, uint16_t concurrency = 1, uint8_t timeout = 5, typename Adaptor::context* adaptor_ctx = nullptr):
-          acceptor_(io_service_, tcp::endpoint(asio::ip::address::from_string(bindaddr), port)),
+          acceptor_(io_service_, tcp::endpoint(asio::ip::make_address(bindaddr), port)),
           signals_(io_service_),
           tick_timer_(io_service_),
           handler_(handler),
@@ -10638,6 +10643,7 @@ namespace crow // NOTE: Already documented in "crow/app.h"
                         task_timer_pool_[i] = &task_timer;
                         task_queue_length_pool_[i] = 0;
 
+                        auto work = asio::make_work_guard(*this->io_service_pool_[i]);
                         init_count++;
                         while (1)
                         {
@@ -10687,7 +10693,7 @@ namespace crow // NOTE: Already documented in "crow/app.h"
             std::thread(
               [this] {
                   notify_start();
-                  io_service_.run();
+                  this->io_service_.run();
                   CROW_LOG_INFO << "Exiting.";
               })
               .join();
@@ -10696,7 +10702,7 @@ namespace crow // NOTE: Already documented in "crow/app.h"
         void stop()
         {
             shutting_down_ = true; // Prevent the acceptor from taking new connections
-            for (auto& io_service : io_service_pool_)
+            for (auto& io_service : this->io_service_pool_)
             {
                 if (io_service != nullptr)
                 {
@@ -10705,8 +10711,8 @@ namespace crow // NOTE: Already documented in "crow/app.h"
                 }
             }
 
-            CROW_LOG_INFO << "Closing main IO service (" << &io_service_ << ')';
-            io_service_.stop(); // Close main io_service
+            CROW_LOG_INFO << "Closing main IO service (" << &this->io_service_ << ')';
+            this->io_service_.stop(); // Close main io_service
         }
 
         /// Wait until the server has properly started
@@ -10749,28 +10755,23 @@ namespace crow // NOTE: Already documented in "crow/app.h"
             if (!shutting_down_)
             {
                 uint16_t service_idx = pick_io_service_idx();
-                asio::io_service& is = *io_service_pool_[service_idx];
                 task_queue_length_pool_[service_idx]++;
-                CROW_LOG_DEBUG << &is << " {" << service_idx << "} queue length: " << task_queue_length_pool_[service_idx];
 
                 auto p = std::make_shared<Connection<Adaptor, Handler, Middlewares...>>(
-                  is, handler_, server_name_, middlewares_,
+                  this->io_service_, handler_, server_name_, middlewares_,
                   get_cached_date_str_pool_[service_idx], *task_timer_pool_[service_idx], adaptor_ctx_, task_queue_length_pool_[service_idx]);
 
                 acceptor_.async_accept(
                   p->socket(),
-                  [this, p, &is, service_idx](error_code ec) {
+                  [this, p, service_idx](error_code ec) {
                       if (!ec)
                       {
-                          is.post(
-                            [p] {
-                                p->start();
-                            });
+                          p->start();
                       }
                       else
                       {
                           task_queue_length_pool_[service_idx]--;
-                          CROW_LOG_DEBUG << &is << " {" << service_idx << "} queue length: " << task_queue_length_pool_[service_idx];
+                          CROW_LOG_DEBUG << "Accept error: " << ec.message();
                       }
                       do_accept();
                   });

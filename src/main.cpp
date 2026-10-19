@@ -108,9 +108,65 @@ int main() {
         res.end();
     });
 
+    CROW_ROUTE(app, "/hero.jpg")([](const crow::request&, crow::response& res) {
+        res.set_static_file_info("public/hero.jpg");
+        res.end();
+    });
+
     // 2. Health Check
     CROW_ROUTE(app, "/api/health")([]() {
-        return crow::response(200, "{\"status\": \"running\"}");
+        crow::response res(200, "{\"status\": \"running\"}");
+        res.add_header("Access-Control-Allow-Origin", "*");
+        return res;
+    });
+
+    // 2b. Flight Catalog
+    CROW_ROUTE(app, "/api/flights")
+    ([]() {
+        crow::json::wvalue resp = crow::json::wvalue::list();
+        
+        resp[0]["flight_id"] = "AI101";
+        resp[0]["airline"] = "Air India";
+        resp[0]["airline_code"] = "AI";
+        resp[0]["from"] = "DEL";
+        resp[0]["from_name"] = "New Delhi (DEL)";
+        resp[0]["to"] = "BOM";
+        resp[0]["to_name"] = "Mumbai (BOM)";
+        resp[0]["price"] = 4500.0;
+        resp[0]["departure"] = "06:00 AM";
+        resp[0]["arrival"] = "08:15 AM";
+        resp[0]["duration"] = "2h 15m";
+        resp[0]["aircraft"] = "Airbus A320neo";
+
+        resp[1]["flight_id"] = "6E202";
+        resp[1]["airline"] = "IndiGo";
+        resp[1]["airline_code"] = "6E";
+        resp[1]["from"] = "BOM";
+        resp[1]["from_name"] = "Mumbai (BOM)";
+        resp[1]["to"] = "BLR";
+        resp[1]["to_name"] = "Bengaluru (BLR)";
+        resp[1]["price"] = 3200.0;
+        resp[1]["departure"] = "10:30 AM";
+        resp[1]["arrival"] = "12:15 PM";
+        resp[1]["duration"] = "1h 45m";
+        resp[1]["aircraft"] = "Airbus A321neo";
+
+        resp[2]["flight_id"] = "UK808";
+        resp[2]["airline"] = "Vistara";
+        resp[2]["airline_code"] = "UK";
+        resp[2]["from"] = "DEL";
+        resp[2]["from_name"] = "New Delhi (DEL)";
+        resp[2]["to"] = "BLR";
+        resp[2]["to_name"] = "Bengaluru (BLR)";
+        resp[2]["price"] = 8500.0;
+        resp[2]["departure"] = "07:15 AM";
+        resp[2]["arrival"] = "10:05 AM";
+        resp[2]["duration"] = "2h 50m";
+        resp[2]["aircraft"] = "Boeing 787-9 Dreamliner";
+
+        crow::response res(200, resp);
+        res.add_header("Access-Control-Allow-Origin", "*");
+        return res;
     });
 
     // 3. Dijkstra Route Optimization
@@ -120,19 +176,26 @@ int main() {
         auto to = req.url_params.get("to");
 
         if (!from || !to) {
-            return crow::response(400, "{\"error\": \"Provide both 'from' and 'to' parameters.\"}");
+            crow::response res(400, "{\"error\": \"Provide both 'from' and 'to' parameters.\"}");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            return res;
         }
 
-        RouteResult res = graph.findCheapestRoute(from, to);
-        if (res.total_cost < 0) {
-            return crow::response(404, "{\"error\": \"No route found.\"}");
+        RouteResult res_route = graph.findCheapestRoute(from, to);
+        if (res_route.total_cost < 0) {
+            crow::response res(404, "{\"error\": \"No route found.\"}");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            return res;
         }
 
         crow::json::wvalue resp;
-        resp["total_cost"] = res.total_cost;
-        for (size_t i = 0; i < res.path.size(); ++i) resp["path"][i] = res.path[i];
-        for (size_t i = 0; i < res.flight_ids.size(); ++i) resp["flights"][i] = res.flight_ids[i];
-        return crow::response(200, resp);
+        resp["total_cost"] = res_route.total_cost;
+        for (size_t i = 0; i < res_route.path.size(); ++i) resp["path"][i] = res_route.path[i];
+        for (size_t i = 0; i < res_route.flight_ids.size(); ++i) resp["flights"][i] = res_route.flight_ids[i];
+        
+        crow::response res(200, resp);
+        res.add_header("Access-Control-Allow-Origin", "*");
+        return res;
     });
 
     // 4. Get Occupied Seats for a Flight
@@ -142,7 +205,9 @@ int main() {
         sqlite3_stmt* stmt;
 
         if (sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
-            return crow::response(500, "{\"error\": \"Failed to query seats.\"}");
+            crow::response res(500, "{\"error\": \"Failed to query seats.\"}");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            return res;
         }
 
         sqlite3_bind_text(stmt, 1, flight_id.c_str(), -1, SQLITE_STATIC);
@@ -159,15 +224,82 @@ int main() {
         for (size_t i = 0; i < occupied.size(); ++i) {
             resp["occupied_seats"][i] = occupied[i];
         }
-        return crow::response(200, resp);
+        crow::response res(200, resp);
+        res.add_header("Access-Control-Allow-Origin", "*");
+        return res;
+    });
+
+    // 4b. Get All Bookings
+    CROW_ROUTE(app, "/api/bookings")
+    ([db]() {
+        std::string query = "SELECT booking_id, flight_id, passenger_name, seat_number, created_at FROM bookings ORDER BY booking_id DESC LIMIT 100;";
+        sqlite3_stmt* stmt;
+
+        if (sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+            crow::response res(500, "{\"error\": \"Failed to query bookings.\"}");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            return res;
+        }
+
+        crow::json::wvalue resp = crow::json::wvalue::list();
+        int idx = 0;
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            resp[idx]["booking_id"] = sqlite3_column_int(stmt, 0);
+            const unsigned char* f = sqlite3_column_text(stmt, 1);
+            const unsigned char* p = sqlite3_column_text(stmt, 2);
+            const unsigned char* s = sqlite3_column_text(stmt, 3);
+            const unsigned char* c = sqlite3_column_text(stmt, 4);
+            resp[idx]["flight_id"] = f ? reinterpret_cast<const char*>(f) : "";
+            resp[idx]["passenger_name"] = p ? reinterpret_cast<const char*>(p) : "";
+            resp[idx]["seat_number"] = s ? reinterpret_cast<const char*>(s) : "";
+            resp[idx]["created_at"] = c ? reinterpret_cast<const char*>(c) : "";
+            idx++;
+        }
+        sqlite3_finalize(stmt);
+
+        crow::response res(200, resp);
+        res.add_header("Access-Control-Allow-Origin", "*");
+        return res;
+    });
+
+    // 4c. Cancel Booking
+    CROW_ROUTE(app, "/api/bookings/<int>").methods(crow::HTTPMethod::Delete)
+    ([db](int booking_id) {
+        std::string del_query = "DELETE FROM bookings WHERE booking_id = ?;";
+        sqlite3_stmt* stmt;
+
+        if (sqlite3_prepare_v2(db, del_query.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+            crow::response res(500, "{\"error\": \"Database error.\"}");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            return res;
+        }
+
+        sqlite3_bind_int(stmt, 1, booking_id);
+        int rc = sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+
+        if (rc != SQLITE_DONE) {
+            crow::response res(500, "{\"error\": \"Failed to delete booking.\"}");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            return res;
+        }
+
+        crow::json::wvalue resp;
+        resp["status"] = "CANCELLED";
+        resp["booking_id"] = booking_id;
+        crow::response res(200, resp);
+        res.add_header("Access-Control-Allow-Origin", "*");
+        return res;
     });
 
     // 5. Book Seat with Collision Handling (Safe Prepared Statements)
-    CROW_ROUTE(app, "/api/book").methods(crow::HTTPMethod::POST)
+    CROW_ROUTE(app, "/api/book").methods(crow::HTTPMethod::Post)
     ([db](const crow::request& req) {
         auto body = crow::json::load(req.body);
         if (!body || !body.has("flight_id") || !body.has("passenger_name") || !body.has("seat_number")) {
-            return crow::response(400, "{\"error\": \"Invalid JSON payload.\"}");
+            crow::response res(400, "{\"error\": \"Invalid JSON payload.\"}");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            return res;
         }
 
         std::string flight = body["flight_id"].s();
@@ -178,7 +310,9 @@ int main() {
         sqlite3_stmt* stmt;
 
         if (sqlite3_prepare_v2(db, insert_query.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
-            return crow::response(500, "{\"error\": \"Database error.\"}");
+            crow::response res(500, "{\"error\": \"Database error.\"}");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            return res;
         }
 
         sqlite3_bind_text(stmt, 1, flight.c_str(), -1, SQLITE_STATIC);
@@ -189,9 +323,13 @@ int main() {
         sqlite3_finalize(stmt);
 
         if (rc == SQLITE_CONSTRAINT) {
-            return crow::response(409, "{\"error\": \"Seat " + seat + " is already booked on flight " + flight + "!\"}");
+            crow::response res(409, "{\"error\": \"Seat " + seat + " is already booked on flight " + flight + "!\"}");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            return res;
         } else if (rc != SQLITE_DONE) {
-            return crow::response(500, "{\"error\": \"Failed to complete transaction.\"}");
+            crow::response res(500, "{\"error\": \"Failed to complete transaction.\"}");
+            res.add_header("Access-Control-Allow-Origin", "*");
+            return res;
         }
 
         crow::json::wvalue resp;
@@ -199,11 +337,14 @@ int main() {
         resp["flight_id"] = flight;
         resp["passenger"] = name;
         resp["seat"] = seat;
-        return crow::response(201, resp);
+        crow::response res(201, resp);
+        res.add_header("Access-Control-Allow-Origin", "*");
+        return res;
     });
 
     std::cout << "Starting server on port 18080...\n";
-    app.port(18080).multithreaded().run();
+    app.loglevel(crow::LogLevel::Debug);
+    app.port(18080).run();
 
     sqlite3_close(db);
     return 0;
